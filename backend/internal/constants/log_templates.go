@@ -15,6 +15,8 @@ const (
 	LogCaseUpdateSuccess       = "case update success"
 	LogCaseStatusChangeSuccess = "case status change success"
 	LogCaseStatusChangeFailed  = "case status change failed"
+	LogCaseArchiveRejected     = "case archive rejected: pending billings exist"
+	LogBillingCreateBlocked    = "billing create blocked: case archived"
 	LogCaseAssignSuccess       = "case assign success"
 	LogCaseAssignFailed        = "case assign failed"
 	LogDocumentUploadSuccess   = "document upload success"

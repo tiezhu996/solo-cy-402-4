@@ -72,6 +72,18 @@ func (r *BillingRepository) ListByCase(caseID uint64) ([]model.Billing, error) {
 	return list, nil
 }
 
+// CountPendingByCase 统计某案件的待支付（pending）账单数量。
+// 归档前费用收口的唯一判据：返回值 > 0 即拒绝归档。
+func (r *BillingRepository) CountPendingByCase(caseID uint64) (int64, error) {
+	var n int64
+	if err := r.db.Model(&model.Billing{}).
+		Where("case_id = ? AND status = ?", caseID, "pending").
+		Count(&n).Error; err != nil {
+		return 0, fmt.Errorf("count pending billings by case: %w", err)
+	}
+	return n, nil
+}
+
 // Update 更新账单。
 func (r *BillingRepository) Update(b *model.Billing) error {
 	if err := r.db.Save(b).Error; err != nil {

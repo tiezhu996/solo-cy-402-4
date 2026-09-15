@@ -8,6 +8,7 @@ import (
 	"cylawcase/internal/model"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CaseRepository 案件仓储。
@@ -36,6 +37,19 @@ func (r *CaseRepository) FindByID(id uint64) (*model.Case, error) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("find case by id: %w", err)
+	}
+	return &c, nil
+}
+
+// FindByIDForUpdate 按 ID 查询案件并对行加排他锁（SELECT ... FOR UPDATE）。
+// 必须在事务内调用：归档与账单并发收口时，双方先锁案件行，使冲突操作串行化。
+func (r *CaseRepository) FindByIDForUpdate(id uint64) (*model.Case, error) {
+	var c model.Case
+	if err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).First(&c, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("find case by id for update: %w", err)
 	}
 	return &c, nil
 }

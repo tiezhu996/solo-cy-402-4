@@ -47,12 +47,13 @@ func main() {
 	caseRepo := repository.NewCaseRepository(db)
 	documentRepo := repository.NewDocumentRepository(db)
 	billingRepo := repository.NewBillingRepository(db)
+	txStore := repository.NewTxStore(db)
 
 	userSvc := service.NewUserService(userRepo, logger)
 	clientSvc := service.NewClientService(clientRepo, caseRepo, logger)
-	caseSvc := service.NewCaseService(caseRepo, clientRepo, userRepo, logger)
+	caseSvc := service.NewCaseService(caseRepo, clientRepo, userRepo, billingRepo, txStore, logger)
 	documentSvc := service.NewDocumentService(documentRepo, caseRepo, logger)
-	billingSvc := service.NewBillingService(billingRepo, caseRepo, clientRepo, logger)
+	billingSvc := service.NewBillingService(billingRepo, txStore, logger)
 
 	userHandler := handler.NewUserHandler(userSvc, logger)
 	clientHandler := handler.NewClientHandler(clientSvc, logger)

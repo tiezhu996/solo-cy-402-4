@@ -5,7 +5,9 @@ import AmountSummary from '@/components/common/AmountSummary'
 import StatusBadge from '@/components/common/StatusBadge'
 import { useBillingStore } from '@/stores/billingStore'
 import { createBilling, markPaid, markInvoiced, voidBilling } from '@/api/billing'
+import { getCase } from '@/api/case'
 import { BillingStatusOptions, BillingTypeOptions, BillingTypeText } from '@/constants/billing'
+import { CaseStatus } from '@/constants/case'
 import { formatAmount } from '@/utils/amountFormatter'
 import type { Billing } from '@/types'
 
@@ -25,7 +27,21 @@ export default function Billing() {
 
   async function onCreate() {
     const values = await form.validateFields()
-    await createBilling(values)
+    // 归档收口：已归档案件不得再新增待支付账单（后端事务内仍会强校验，此处仅提前拦截）。
+    try {
+      const res: any = await getCase(values.case_id)
+      if (res?.data?.status === CaseStatus.ARCHIVED) {
+        message.error('该案件已归档，不能再新增账单')
+        return
+      }
+    } catch {
+      return // 案件不存在等错误已由请求拦截器提示
+    }
+    try {
+      await createBilling(values)
+    } catch {
+      return // 后端拒绝（如归档与新建并发冲突）时保留弹窗与输入，结果由服务端终态决定
+    }
     message.success('账单创建成功')
     setOpen(false)
     form.resetFields()

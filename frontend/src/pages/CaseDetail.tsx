@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Card, Descriptions, Tabs, Button, Select, Space, message, Tag } from 'antd'
+import { Alert, Card, Descriptions, Tabs, Button, Select, Space, Tag, message } from 'antd'
 import { getCase, changeCaseStatus, assignLawyer } from '@/api/case'
 import { getClient } from '@/api/client'
 import DocumentList from '@/components/common/DocumentList'
@@ -11,7 +11,8 @@ import TimelineItem from '@/components/common/TimelineItem'
 import { useDocumentStore } from '@/stores/documentStore'
 import { useBillingStore } from '@/stores/billingStore'
 import { useUserStore } from '@/stores/userStore'
-import { CaseStatusOptions, CaseTypeOptions } from '@/constants/case'
+import { CaseStatusOptions, CaseTypeOptions, CaseStatus } from '@/constants/case'
+import { BillingStatus } from '@/constants/billing'
 import type { CaseItem, Client } from '@/types'
 
 export default function CaseDetail() {
@@ -43,9 +44,23 @@ export default function CaseDetail() {
     billingStore.fetchByCase(caseId)
   }
 
+  const pendingBills = billingStore.byCase.filter((b) => b.status === BillingStatus.PENDING)
+
   async function onStatusChange() {
-    await changeCaseStatus(caseId, status)
-    message.success('状态已更新')
+    // 归档前费用收口：前端先提示，后端在事务内再次强校验（并发情况下以后端为准）。
+    if (status === CaseStatus.ARCHIVED && pendingBills.length > 0) {
+      message.error(`仍有 ${pendingBills.length} 笔待支付账单，补齐支付或作废后才能归档`)
+      return
+    }
+    try {
+      await changeCaseStatus(caseId, status)
+      message.success('状态已更新')
+    } catch {
+      // 被后端拒绝（如归档时仍有待支付账单）：回拉案件，状态与结案日期保持为服务端值。
+      setStatus(item?.status ?? status)
+      await load()
+      return
+    }
     load()
   }
 
@@ -82,9 +97,39 @@ export default function CaseDetail() {
                   <Descriptions.Item label="摘要" span={2}>{item.summary || '-'}</Descriptions.Item>
                 </Descriptions>
                 <PermissionGuard roles={['admin', 'lawyer']}>
+                  {item.status === CaseStatus.CLOSED && pendingBills.length > 0 && (
+                    <Alert
+                      style={{ marginTop: 16 }}
+                      type="warning"
+                      showIcon
+                      message={`本案有 ${pendingBills.length} 笔待支付账单`}
+                      description="归档前必须补齐支付或作废全部待支付账单，否则案件会保持“已结案”，无法归档。"
+                    />
+                  )}
+                  {item.status === CaseStatus.ARCHIVED && (
+                    <Alert
+                      style={{ marginTop: 16 }}
+                      type="info"
+                      showIcon
+                      message="案件已归档，费用已收口"
+                      description="归档为稳定终态，不能再新增待支付账单，状态与结案日期不再变化。"
+                    />
+                  )}
                   <Space style={{ marginTop: 16 }}>
-                    <Select value={status} style={{ width: 150 }} options={CaseStatusOptions} onChange={setStatus} />
-                    <Button type="primary" onClick={onStatusChange}>更新状态</Button>
+                    <Select
+                      value={status}
+                      style={{ width: 150 }}
+                      options={CaseStatusOptions}
+                      onChange={setStatus}
+                      disabled={item.status === CaseStatus.ARCHIVED}
+                    />
+                    <Button
+                      type="primary"
+                      onClick={onStatusChange}
+                      disabled={item.status === CaseStatus.ARCHIVED}
+                    >
+                      更新状态
+                    </Button>
                   </Space>
                   <Space style={{ marginTop: 8 }}>
                     <Select
@@ -120,7 +165,29 @@ export default function CaseDetail() {
           {
             key: 'billings',
             label: '账单',
-            children: billingStore.byCase.map((b) => <BillingCard key={b.id} item={b} />),
+            children: (
+              <>
+                {item.status === CaseStatus.CLOSED && pendingBills.length > 0 && (
+                  <Alert
+                    style={{ marginBottom: 12 }}
+                    type="warning"
+                    showIcon
+                    message={`${pendingBills.length} 笔待支付账单未结清`}
+                    description="请在费用中心将待支付账单标记支付或作废后，再执行归档。"
+                  />
+                )}
+                {item.status === CaseStatus.ARCHIVED && (
+                  <Alert
+                    style={{ marginBottom: 12 }}
+                    type="info"
+                    showIcon
+                    message="案件已归档，账单只读收口"
+                    description="归档后不得再新增待支付账单，仅可查看既有账单。"
+                  />
+                )}
+                {billingStore.byCase.map((b) => <BillingCard key={b.id} item={b} />)}
+              </>
+            ),
           },
           {
             key: 'timeline',
