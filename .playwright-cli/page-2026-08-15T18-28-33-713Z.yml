@@ -1,0 +1,78 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e30]:
+    - banner [ref=e31]:
+      - generic [ref=e32] [cursor=pointer]: 律师案件管理系统
+      - menu [ref=e33]:
+        - menuitem "案件列表" [ref=e34] [cursor=pointer]
+        - menuitem "客户管理" [ref=e35] [cursor=pointer]
+        - menuitem "费用中心" [ref=e36] [cursor=pointer]
+        - menuitem "文档中心" [ref=e37] [cursor=pointer]
+        - menuitem "审计日志" [ref=e38] [cursor=pointer]
+        - menuitem "个人中心" [ref=e39] [cursor=pointer]
+        - menuitem [disabled]
+      - generic [ref=e40] [cursor=pointer]:
+        - img "user" [ref=e43]
+        - generic [ref=e46]: 张律师
+    - main [ref=e47]:
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - textbox "搜索关键词" [ref=e53]
+          - generic [ref=e58] [cursor=pointer]:
+            - combobox [ref=e60]
+            - generic: 类型
+          - generic [ref=e64] [cursor=pointer]:
+            - combobox [ref=e66]
+            - generic: 状态
+          - generic [ref=e70] [cursor=pointer]:
+            - combobox [ref=e72]
+            - generic: 主办律师
+          - button "查 询" [ref=e74] [cursor=pointer]
+        - button "plus 创建案件" [ref=e76] [cursor=pointer]:
+          - img "plus" [ref=e78]
+          - generic [ref=e82]: 创建案件
+        - generic [ref=e85]:
+          - table [ref=e89]:
+            - rowgroup [ref=e90]:
+              - row [ref=e91]:
+                - columnheader "案号" [ref=e92]
+                - columnheader "标题" [ref=e93]
+                - columnheader "类型" [ref=e94]
+                - columnheader "状态" [ref=e95]
+                - columnheader "主办律师" [ref=e96]
+            - rowgroup [ref=e97]:
+              - row [ref=e98] [cursor=pointer]:
+                - cell "CY20262927" [ref=e99]
+                - cell "冒烟测试合同纠纷" [ref=e100]
+                - cell "商事" [ref=e101]
+                - cell "已结案" [ref=e102]
+                - cell "张律师" [ref=e104]
+              - row [ref=e105] [cursor=pointer]:
+                - cell "CY20260003" [ref=e106]
+                - cell "劳动争议仲裁案（已结）" [ref=e107]
+                - cell "劳动" [ref=e108]
+                - cell "已结案" [ref=e109]
+                - cell "张律师" [ref=e111]
+              - row [ref=e112] [cursor=pointer]:
+                - cell "CY20260002" [ref=e113]
+                - cell "陈晓明民间借贷纠纷" [ref=e114]
+                - cell "民事" [ref=e115]
+                - cell "已立案" [ref=e116]
+                - cell "张律师" [ref=e118]
+              - row [ref=e119] [cursor=pointer]:
+                - cell "CY20260001" [ref=e120]
+                - cell "华信科技买卖合同纠纷" [ref=e121]
+                - cell "商事" [ref=e122]
+                - cell "调查取证" [ref=e123]
+                - cell "张律师" [ref=e125]
+          - list [ref=e126]:
+            - listitem [ref=e127]: 共 4 条
+            - listitem "上一页" [ref=e128]:
+              - button [disabled] [ref=e129]:
+                - img "left" [ref=e130]
+            - listitem "1" [ref=e133] [cursor=pointer]
+            - listitem "下一页" [ref=e135]:
+              - button [disabled] [ref=e136]:
+                - img "right" [ref=e137]
+  - generic [ref=e141]:
+    - img "check-circle" [ref=e142]
+    - generic [ref=e145]: 登录成功

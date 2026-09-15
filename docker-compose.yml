@@ -1,0 +1,68 @@
+name: cylawcase
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-cylawcase}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cylawcase_db}
+      POSTGRES_USER: ${DB_USER:-cylawcase_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cylawcase_pwd}
+      TZ: Asia/Shanghai
+    ports:
+      - "${DB_PORT:-38102}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${DB_USER:-cylawcase_user} -d $${DB_NAME:-cylawcase_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-cylawcase}-backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      SERVER_PORT: "8080"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-cylawcase_db}
+      DB_USER: ${DB_USER:-cylawcase_user}
+      DB_PASSWORD: ${DB_PASSWORD:-cylawcase_pwd}
+      JWT_SECRET: ${JWT_SECRET:-change_me_to_a_long_random_string}
+      JWT_EXPIRE_HOURS: "72"
+      RATE_LIMIT_PER_MINUTE: "120"
+      UPLOAD_DIR: /app/uploads
+      UPLOAD_MAX_MB: "10"
+    ports:
+      - "${BACKEND_PORT:-29069}:8080"
+    volumes:
+      - upload-data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  frontend:
+    build: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-cylawcase}-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-28031}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  upload-data:

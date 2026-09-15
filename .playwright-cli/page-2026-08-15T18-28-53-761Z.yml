@@ -1,0 +1,70 @@
+- generic [ref=f2e3]:
+  - banner [ref=f2e4]:
+    - generic [ref=f2e5] [cursor=pointer]: 律师案件管理系统
+    - menu [ref=f2e6]:
+      - menuitem "案件列表" [ref=f2e7] [cursor=pointer]
+      - menuitem "客户管理" [ref=f2e8] [cursor=pointer]
+      - menuitem "费用中心" [ref=f2e9] [cursor=pointer]
+      - menuitem "文档中心" [ref=f2e10] [cursor=pointer]
+      - menuitem "审计日志" [ref=f2e11] [cursor=pointer]
+      - menuitem "个人中心" [ref=f2e12] [cursor=pointer]
+      - menuitem [disabled]
+    - generic [ref=f2e13] [cursor=pointer]:
+      - img "user" [ref=f2e16]
+      - generic [ref=f2e19]: 张律师
+  - main [ref=f2e20]:
+    - generic [ref=f2e22]:
+      - generic [ref=f2e23]:
+        - generic [ref=f2e26]:
+          - searchbox "检索客户姓名/证件号" [ref=f2e28]
+          - button [ref=f2e31] [cursor=pointer]:
+            - img "search" [ref=f2e33]
+        - button "plus 新建客户" [ref=f2e37] [cursor=pointer]:
+          - img "plus" [ref=f2e39]
+          - generic [ref=f2e43]: 新建客户
+      - generic [ref=f2e46]:
+        - table [ref=f2e50]:
+          - rowgroup [ref=f2e51]:
+            - row [ref=f2e52]:
+              - columnheader "ID" [ref=f2e53]
+              - columnheader "姓名" [ref=f2e54]
+              - columnheader "证件号" [ref=f2e55]
+              - columnheader "联系方式" [ref=f2e56]
+              - columnheader "地址" [ref=f2e57]
+              - columnheader "操作" [ref=f2e58]
+          - rowgroup [ref=f2e59]:
+            - row [ref=f2e60]:
+              - cell "3" [ref=f2e61]
+              - cell "冒烟客户公司(改)" [ref=f2e62]
+              - cell [ref=f2e63]
+              - cell "刘总 13911112222" [ref=f2e64]
+              - cell "上海浦东" [ref=f2e65]
+              - cell [ref=f2e66]:
+                - text: 详情
+                - button "删除" [ref=f2e67] [cursor=pointer]
+            - row [ref=f2e69]:
+              - cell "2" [ref=f2e70]
+              - cell "陈晓明" [ref=f2e71]
+              - cell "440300199001011234" [ref=f2e72]
+              - cell "陈先生 13900000002" [ref=f2e73]
+              - cell "深圳市福田区" [ref=f2e74]
+              - cell [ref=f2e75]:
+                - text: 详情
+                - button "删除" [ref=f2e76] [cursor=pointer]
+            - row [ref=f2e78]:
+              - cell "1" [ref=f2e79]
+              - cell "深圳华信科技有限公司" [ref=f2e80]
+              - cell "91440300MA5XXXXX1" [ref=f2e81]
+              - cell "王经理 13900000001" [ref=f2e82]
+              - cell "深圳市南山区科技园" [ref=f2e83]
+              - cell [ref=f2e84]:
+                - text: 详情
+                - button "删除" [ref=f2e85] [cursor=pointer]
+        - list [ref=f2e87]:
+          - listitem "上一页" [ref=f2e88]:
+            - button [disabled] [ref=f2e89]:
+              - img "left" [ref=f2e90]
+          - listitem "1" [ref=f2e93] [cursor=pointer]
+          - listitem "下一页" [ref=f2e95]:
+            - button [disabled] [ref=f2e96]:
+              - img "right" [ref=f2e97]
