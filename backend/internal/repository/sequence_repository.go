@@ -39,6 +39,8 @@ func (r *SequenceRepository) EnsureSequences() error {
 	}
 	for _, stmt := range stmts {
 		if err := r.db.Exec(stmt).Error; err != nil {
+			// 容忍并发创建：42P07/42P06 对象已存在，以及 IF NOT EXISTS 仍可能抛出的
+			// pg_class 唯一冲突 23505（两个后端同时 CREATE）。出现任一都说明序列已建好，直接复用。
 			if !IsAlreadyExistsError(err) {
 				return fmt.Errorf("ensure sequence: %w", err)
 			}
@@ -94,12 +96,19 @@ func (r *SequenceRepository) NextValue(name string) (int64, error) {
 	return v, nil
 }
 
-// IsAlreadyExistsError 是否为“对象已存在”错误（并发创建序列时容忍）。
+// IsAlreadyExistsError 是否为“对象已存在”错误（并发创建表/序列时容忍）。
 func IsAlreadyExistsError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// 42P06 duplicate_schema / 42P07 duplicate_table：序列已被其他实例抢先创建。
-		return pgErr.Code == "42P07" || pgErr.Code == "42P06"
+		switch pgErr.Code {
+		case "42P06", "42P07":
+			// duplicate_schema / duplicate_table：对象已被其他实例抢先创建。
+			return true
+		case "23505":
+			// unique_violation：并发 CREATE 命中 pg_class_relname_nsp_index 等目录唯一索引，
+			// 语义等价于“已存在”，调用方应复用而不是让实例退出。
+			return true
+		}
 	}
 	return false
 }

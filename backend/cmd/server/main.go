@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -31,19 +32,25 @@ func main() {
 		logger.Error("connect database failed", "error", err.Error())
 		os.Exit(1)
 	}
-	if err := db.AutoMigrate(
-		&model.User{}, &model.Client{}, &model.Case{}, &model.Document{}, &model.Billing{}, &model.AuditLog{},
-	); err != nil {
-		logger.Error("auto migrate failed", "error", err.Error())
-		os.Exit(1)
-	}
-	// 创建案件/账单业务编号序列：幂等，支持多实例启动竞争与多次重启，不清库、不改号。
-	if err := repository.NewSequenceRepository(db).EnsureSequences(); err != nil {
-		logger.Error("ensure number sequences failed", "error", err.Error())
-		os.Exit(1)
-	}
-	if err := service.NewSeedService(db, logger).Seed(); err != nil {
-		logger.Error("seed failed", "error", err.Error())
+	// 跨实例启动引导锁：旧库缺少表/编号序列时，多个实例同时启动也只让一个执行建表、
+	// 建/对齐序列与种子；其他实例不退出，而是等待锁后复用已就绪的对象继续启动。
+	bootErr := repository.WithBootstrapLock(db, logger, func() error {
+		if err := db.AutoMigrate(
+			&model.User{}, &model.Client{}, &model.Case{}, &model.Document{}, &model.Billing{}, &model.AuditLog{},
+		); err != nil {
+			return fmt.Errorf("auto migrate failed: %w", err)
+		}
+		// 创建案件/账单业务编号序列并按已有编号向后对齐：幂等、单调只增，不清库、不回退、不改号。
+		if err := repository.NewSequenceRepository(db).EnsureSequences(); err != nil {
+			return fmt.Errorf("ensure number sequences failed: %w", err)
+		}
+		if err := service.NewSeedService(db, logger).Seed(); err != nil {
+			return fmt.Errorf("seed failed: %w", err)
+		}
+		return nil
+	})
+	if bootErr != nil {
+		logger.Error("database bootstrap failed", "error", bootErr.Error())
 		os.Exit(1)
 	}
 

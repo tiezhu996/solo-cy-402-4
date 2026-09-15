@@ -175,6 +175,8 @@ cy-402/
 
 - 编号由 PostgreSQL 序列 `case_no_seq`、`bill_no_seq` 通过事务内 `nextval` 分配，服务启动时 `CREATE SEQUENCE IF NOT EXISTS` 幂等创建，并自动对齐历史编号的最大数字后缀。
 - 唯一性在多次启动、多个实例（水平扩容）、同一数据库连续运行下均成立，不依赖进程内计数器，无需清库或人工改号；历史时间戳编号与新序列编号格式互不冲突。
+- **多实例并发启动安全**：启动引导（建表 AutoMigrate → 建/对齐序列 → 种子数据）在跨实例排他的 PostgreSQL advisory lock（`WithBootstrapLock`）内执行。旧库缺少表/序列时多个实例同时启动，只有一个实例执行 DDL，其余实例**不退出**，而是稳定等待（日志 `waiting instead of exiting`），获锁后复用已建好的表与序列继续启动；并发 `CREATE` 的 `23505/42P07` 冲突也被当作“已存在”沿用。仅数据库本身不可达才启动失败。
+- **对齐只向后不回退**：序列对齐取 `GREATEST(序列当前值, 已有 case_no/bill_no 最大数字后缀)`，只提升、不回退、不覆盖或删除已有记录；对齐在引导锁内完成，不与运行期 `nextval` 竞争。
 - 编号撞唯一索引时：整事务回滚（本次 `nextval` 作废、绝不复用旧号，回滚同时释放案件行锁），用全新序列值重新取号、重新加锁并复核归档终态后重试；成功严格只落一条记录。业务错误（如 40904）不重试、原样返回。
 - 取号失败或多次冲突仍未成功时，稳定返回可重试错误（HTTP 503，错误码 50301）且不落任何记录；待序列恢复后重试同一请求即可。
 
@@ -182,7 +184,7 @@ cy-402/
 | --- | --- | --- | --- |
 | 50301 | CodeNumberAllocateFailed | 503 | 编号生成临时失败（可重试），请求未产生任何数据 |
 
-后端并发集成测试位于 `backend/internal/service/archive_closure_test.go`（归档/建账竞态）与 `backend/internal/service/numbering_test.go`（多实例编号唯一、冲突重试、缺序列 50301、升级对齐），通过 `CY_TEST_DB_DSN` 指向 PostgreSQL 后运行（如 `go test ./internal/service/ -race`）；未配置 DSN 时自动跳过，纯逻辑表驱动测试始终运行。
+后端集成测试：`internal/repository/bootstrap_test.go`（多实例冷启动引导串行、锁释放、并发建序列不退出、对齐单调只增）、`internal/service/archive_closure_test.go`（归档/建账竞态）与 `internal/service/numbering_test.go`（多实例编号唯一、冲突重试、缺序列 50301、升级对齐），通过 `CY_TEST_DB_DSN` 指向 PostgreSQL 后运行（如 `go test ./... -race`）；未配置 DSN 时自动跳过，纯逻辑表驱动测试始终运行。
 
 ## 主要功能
 
