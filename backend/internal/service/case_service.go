@@ -2,9 +2,9 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
 	"time"
 
 	"cylawcase/internal/constants"
@@ -15,52 +15,73 @@ import (
 
 // CaseService 案件业务逻辑。
 type CaseService struct {
-	repo        *repository.CaseRepository
-	clientRepo  *repository.ClientRepository
-	userRepo    *repository.UserRepository
-	billingRepo *repository.BillingRepository
-	txStore     *repository.TxStore
-	logger      *slog.Logger
+	repo       *repository.CaseRepository
+	clientRepo *repository.ClientRepository
+	userRepo   *repository.UserRepository
+	txStore    *repository.TxStore
+	logger     *slog.Logger
 }
 
 // NewCaseService 构造案件服务。
 func NewCaseService(repo *repository.CaseRepository, clientRepo *repository.ClientRepository,
-	userRepo *repository.UserRepository, billingRepo *repository.BillingRepository,
-	txStore *repository.TxStore, logger *slog.Logger) *CaseService {
+	userRepo *repository.UserRepository, txStore *repository.TxStore, logger *slog.Logger) *CaseService {
 	return &CaseService{repo: repo, clientRepo: clientRepo, userRepo: userRepo,
-		billingRepo: billingRepo, txStore: txStore, logger: logger}
+		txStore: txStore, logger: logger}
 }
 
 // Create 创建案件。
+// 案件编号在事务内由数据库序列分配：多实例/多次启动下不会重号；
+// 撞唯一索引时整事务回滚并用全新 nextval 重试，成功严格落一条记录。
 func (s *CaseService) Create(clientID, leadLawyerID uint64, title, caseType, summary string,
 	acceptDate *time.Time, coLawyerIDs []uint64) (*model.Case, error) {
 	if !constants.IsValidCaseType(caseType) {
 		return nil, util.NewAppError(constants.CodeValidationFailed, "Case[case_type="+caseType+"] create: invalid type")
 	}
-	if _, err := s.clientRepo.FindByID(clientID); err != nil {
-		return nil, util.Wrap(err, "Case[client_id=%d] create: client not found", clientID)
-	}
-	if _, err := s.userRepo.FindByID(leadLawyerID); err != nil {
-		return nil, util.Wrap(err, "Case[lead_lawyer_id=%d] create: lawyer not found", leadLawyerID)
-	}
 	co := jsonCoLawyers(coLawyerIDs)
-	c := &model.Case{
-		CaseNo:       genCaseNo(),
-		Title:        title,
-		CaseType:     caseType,
-		Status:       constants.CaseStatusFiled,
-		AcceptDate:   acceptDate,
-		Summary:      summary,
-		ClientID:     clientID,
-		LeadLawyerID: leadLawyerID,
-		CoLawyerIDs:  co,
+	var created *model.Case
+	err := runWithNumberTx(s.logger, s.txStore, "Case", func(tx *repository.TxRepos) error {
+		if _, err := tx.Clients.FindByID(clientID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return util.NewAppError(constants.CodeNotFound,
+					fmt.Sprintf("Case[client_id=%d] create: client not found", clientID))
+			}
+			return util.Wrap(err, "Case[client_id=%d] create: client not found", clientID)
+		}
+		if _, err := tx.Users.FindByID(leadLawyerID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return util.NewAppError(constants.CodeNotFound,
+					fmt.Sprintf("Case[lead_lawyer_id=%d] create: lawyer not found", leadLawyerID))
+			}
+			return util.Wrap(err, "Case[lead_lawyer_id=%d] create: lawyer not found", leadLawyerID)
+		}
+		caseNo, err := nextCaseNo(tx)
+		if err != nil {
+			s.logger.Error(constants.LogNumberAllocateFailed, "entity", "Case", "error", err.Error())
+			return err // 经 runWithNumberTx 归为 50301 可重试
+		}
+		c := &model.Case{
+			CaseNo:       caseNo,
+			Title:        title,
+			CaseType:     caseType,
+			Status:       constants.CaseStatusFiled,
+			AcceptDate:   acceptDate,
+			Summary:      summary,
+			ClientID:     clientID,
+			LeadLawyerID: leadLawyerID,
+			CoLawyerIDs:  co,
+		}
+		if err := tx.Cases.Create(c); err != nil {
+			s.logger.Error(constants.LogCaseCreateFailed, "error", err.Error())
+			return util.Wrap(err, "Case[title=%s] create failed", title)
+		}
+		created = c
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	if err := s.repo.Create(c); err != nil {
-		s.logger.Error(constants.LogCaseCreateFailed, "error", err.Error())
-		return nil, util.Wrap(err, "Case[title=%s] create failed", title)
-	}
-	s.logger.Info(constants.LogCaseCreateSuccess, "case_id", c.ID, "case_no", c.CaseNo)
-	return c, nil
+	s.logger.Info(constants.LogCaseCreateSuccess, "case_id", created.ID, "case_no", created.CaseNo)
+	return created, nil
 }
 
 // Update 更新案件信息。
@@ -209,15 +230,6 @@ func jsonCoLawyers(ids []uint64) model.CoLawyerJSON {
 	raw, _ := json.Marshal(ids)
 	return model.CoLawyerJSON(raw)
 }
-
-func genCaseNo() string {
-	// 原子序号兜底：并发建案时纳秒取模相同也不会撞 case_no 唯一索引。
-	seq := caseNoSeq.Add(1) % 10000
-	return fmt.Sprintf("CY%d%04d%04d", time.Now().Year(), time.Now().UnixNano()%10000, seq)
-}
-
-// caseNoSeq case_no 进程内发号器，防止并发创建时单号碰撞。
-var caseNoSeq atomic.Uint64
 
 func u64(v uint64) string {
 	return fmt.Sprintf("%d", v)

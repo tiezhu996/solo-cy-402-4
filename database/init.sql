@@ -40,6 +40,12 @@ CREATE TABLE IF NOT EXISTS cases (
 );
 ALTER TABLE cases ADD CONSTRAINT uni_cases_case_no UNIQUE (case_no);
 
+-- 案件/账单业务编号序列：由后端 nextval 发号，跨多次启动、多个实例、同一数据库连续运行保证唯一。
+-- IF NOT EXISTS 保证脚本重复执行与多实例启动竞争安全；历史显式编号（CY2026xxxx/BILL2026xxxx）
+-- 与新编号格式（年份+8/10 位序列值）互不冲突，无需 setval 对齐，也不要求清库。
+CREATE SEQUENCE IF NOT EXISTS case_no_seq AS BIGINT START WITH 1 INCREMENT BY 1 CACHE 1;
+CREATE SEQUENCE IF NOT EXISTS bill_no_seq AS BIGINT START WITH 1 INCREMENT BY 1 CACHE 1;
+
 CREATE TABLE IF NOT EXISTS documents (
   id BIGSERIAL PRIMARY KEY,
   title VARCHAR(200) NOT NULL,

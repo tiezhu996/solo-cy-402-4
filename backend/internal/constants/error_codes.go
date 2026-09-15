@@ -17,6 +17,8 @@ const (
 	CodeBillingStatusConflict     = 40902
 	CodeCaseArchivePendingBilling = 40903
 	CodeBillingCreateArchivedCase = 40904
+	CodeServiceUnavailable        = 50300
+	CodeNumberAllocateFailed      = 50301
 	CodeUploadTooLarge            = 41300
 	CodeUnsupportedType           = 41500
 )

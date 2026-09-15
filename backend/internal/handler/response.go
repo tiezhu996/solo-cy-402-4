@@ -47,6 +47,9 @@ func appErrorStatus(code int) int {
 		return http.StatusUnprocessableEntity
 	case constants.CodeTooManyRequests:
 		return http.StatusTooManyRequests
+	case constants.CodeServiceUnavailable, constants.CodeNumberAllocateFailed:
+		// 编号生成等可重试临时失败：调用方应当稍后重试同一请求。
+		return http.StatusServiceUnavailable
 	case constants.CodeUploadTooLarge:
 		return http.StatusRequestEntityTooLarge
 	default:

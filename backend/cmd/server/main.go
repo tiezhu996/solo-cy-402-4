@@ -37,6 +37,11 @@ func main() {
 		logger.Error("auto migrate failed", "error", err.Error())
 		os.Exit(1)
 	}
+	// 创建案件/账单业务编号序列：幂等，支持多实例启动竞争与多次重启，不清库、不改号。
+	if err := repository.NewSequenceRepository(db).EnsureSequences(); err != nil {
+		logger.Error("ensure number sequences failed", "error", err.Error())
+		os.Exit(1)
+	}
 	if err := service.NewSeedService(db, logger).Seed(); err != nil {
 		logger.Error("seed failed", "error", err.Error())
 		os.Exit(1)
@@ -51,7 +56,7 @@ func main() {
 
 	userSvc := service.NewUserService(userRepo, logger)
 	clientSvc := service.NewClientService(clientRepo, caseRepo, logger)
-	caseSvc := service.NewCaseService(caseRepo, clientRepo, userRepo, billingRepo, txStore, logger)
+	caseSvc := service.NewCaseService(caseRepo, clientRepo, userRepo, txStore, logger)
 	documentSvc := service.NewDocumentService(documentRepo, caseRepo, logger)
 	billingSvc := service.NewBillingService(billingRepo, txStore, logger)
 

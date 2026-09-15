@@ -171,7 +171,18 @@ cy-402/
 
 并发语义：归档（`POST /cases/:id/status` 传 `archived`）与新建账单（`POST /billings`）在数据库事务内通过案件行排他锁串行化；两个请求同时到达时只会得到“已结案+待支付账单”或“已归档+无待支付账单”之一，对同一终态重复请求结果不变（归档幂等、归档后建账恒为 40904）。
 
-后端并发集成测试位于 `backend/internal/service/archive_closure_test.go`，通过 `CY_TEST_DB_DSN` 指向 PostgreSQL 后运行（`go test ./internal/service/ -run TestConcurrentArchiveVsCreate -race`）；未配置 DSN 时自动跳过，纯逻辑表驱动测试始终运行。
+业务编号发号（案件 `case_no` / 账单 `bill_no`）：
+
+- 编号由 PostgreSQL 序列 `case_no_seq`、`bill_no_seq` 通过事务内 `nextval` 分配，服务启动时 `CREATE SEQUENCE IF NOT EXISTS` 幂等创建，并自动对齐历史编号的最大数字后缀。
+- 唯一性在多次启动、多个实例（水平扩容）、同一数据库连续运行下均成立，不依赖进程内计数器，无需清库或人工改号；历史时间戳编号与新序列编号格式互不冲突。
+- 编号撞唯一索引时：整事务回滚（本次 `nextval` 作废、绝不复用旧号，回滚同时释放案件行锁），用全新序列值重新取号、重新加锁并复核归档终态后重试；成功严格只落一条记录。业务错误（如 40904）不重试、原样返回。
+- 取号失败或多次冲突仍未成功时，稳定返回可重试错误（HTTP 503，错误码 50301）且不落任何记录；待序列恢复后重试同一请求即可。
+
+| code | 常量 | HTTP | 含义 |
+| --- | --- | --- | --- |
+| 50301 | CodeNumberAllocateFailed | 503 | 编号生成临时失败（可重试），请求未产生任何数据 |
+
+后端并发集成测试位于 `backend/internal/service/archive_closure_test.go`（归档/建账竞态）与 `backend/internal/service/numbering_test.go`（多实例编号唯一、冲突重试、缺序列 50301、升级对齐），通过 `CY_TEST_DB_DSN` 指向 PostgreSQL 后运行（如 `go test ./internal/service/ -race`）；未配置 DSN 时自动跳过，纯逻辑表驱动测试始终运行。
 
 ## 主要功能
 

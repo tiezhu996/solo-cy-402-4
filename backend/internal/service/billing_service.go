@@ -1,10 +1,10 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"cylawcase/internal/constants"
@@ -29,6 +29,9 @@ func NewBillingService(repo *repository.BillingRepository, txStore *repository.T
 // Create 创建账单。
 // 案件已归档后不得再新增待支付账单：与归档共用同一把案件行锁，
 // 保证“归档与新建账单同时到达”时二者串行，收口为唯一稳定终态。
+// 账单编号在锁内由数据库序列分配；若撞唯一索引则整事务回滚——
+// 回滚同时释放案件行锁——用全新 nextval 重新加锁并复核归档终态后重试，
+// 绝不复用旧号，也不会在已归档案件上落单。
 func (s *BillingService) Create(caseID, clientID uint64, billingType string, amount float64, invoiceInfo string) (*model.Billing, error) {
 	if !constants.IsValidBillingType(billingType) {
 		return nil, util.NewAppError(constants.CodeValidationFailed, "Billing[billing_type="+billingType+"] create: invalid type")
@@ -37,10 +40,14 @@ func (s *BillingService) Create(caseID, clientID uint64, billingType string, amo
 		return nil, util.NewAppError(constants.CodeValidationFailed, "Billing[amount="+strconv.FormatFloat(amount, 'f', 2, 64)+"] create: amount must be >= 0")
 	}
 	var created *model.Billing
-	err := s.txStore.WithinTx(func(tx *repository.TxRepos) error {
-		// 锁案件行，与归档事务互斥串行。
+	err := runWithNumberTx(s.logger, s.txStore, "Billing", func(tx *repository.TxRepos) error {
+		// 锁案件行，与归档事务互斥串行；重试时重新加锁并再次复核归档终态。
 		c, err := tx.Cases.FindByIDForUpdate(caseID)
 		if err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return util.NewAppError(constants.CodeNotFound,
+					"Billing[case_id="+u64(caseID)+"] create: case not found")
+			}
 			return util.Wrap(err, "Billing[case_id=%d] create: case not found", caseID)
 		}
 		if c.Status == constants.CaseStatusArchived {
@@ -50,9 +57,18 @@ func (s *BillingService) Create(caseID, clientID uint64, billingType string, amo
 				"Billing[case_id="+u64(caseID)+"] create rejected: case already archived")
 		}
 		if _, err := tx.Clients.FindByID(clientID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return util.NewAppError(constants.CodeNotFound,
+					"Billing[client_id="+u64(clientID)+"] create: client not found")
+			}
 			return util.Wrap(err, "Billing[client_id=%d] create: client not found", clientID)
 		}
-		b := &model.Billing{BillNo: genBillNo(), BillingType: billingType,
+		billNo, err := nextBillNo(tx)
+		if err != nil {
+			s.logger.Error(constants.LogNumberAllocateFailed, "entity", "Billing", "error", err.Error())
+			return err // 经 runWithNumberTx 归为 50301 可重试
+		}
+		b := &model.Billing{BillNo: billNo, BillingType: billingType,
 			Amount: amount, Status: constants.BillingStatusPending,
 			CaseID: caseID, ClientID: clientID, InvoiceInfo: invoiceInfo}
 		if err := tx.Billings.Create(b); err != nil {
@@ -143,12 +159,3 @@ func (s *BillingService) Summary() (map[string]float64, error) {
 	s.logger.Info(constants.LogBillingSummary, "summary", fmt.Sprintf("%v", sum))
 	return sum, nil
 }
-
-func genBillNo() string {
-	// 原子序号兜底：并发新建账单时即便纳秒相同也不会撞 bill_no 唯一索引。
-	seq := billNoSeq.Add(1) % 1000
-	return fmt.Sprintf("BILL%d%06d%03d", time.Now().Year(), time.Now().UnixNano()%1000000, seq)
-}
-
-// billNoSeq bill_no 进程内发号器，防止并发创建时单号碰撞。
-var billNoSeq atomic.Uint64

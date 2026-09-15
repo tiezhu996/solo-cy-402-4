@@ -15,6 +15,7 @@ const (
 	MsgBillingStatusConflict     = "账单状态流转冲突"
 	MsgCaseArchivePendingBilling = "案件存在待支付账单，需补齐支付或作废后方可归档"
 	MsgBillingCreateArchivedCase = "案件已归档，不得再新增待支付账单"
+	MsgNumberAllocateFailed      = "编号生成繁忙，请重试"
 	MsgUploadTooLarge            = "上传文件过大"
 	MsgUnsupportedFileType       = "不支持的文件类型"
 	MsgLoginSuccess              = "登录成功"

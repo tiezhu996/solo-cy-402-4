@@ -43,6 +43,9 @@ func setupArchiveSuite(t *testing.T) *archiveSuite {
 	); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
+	if err := repository.NewSequenceRepository(db).EnsureSequences(); err != nil {
+		t.Fatalf("ensure sequences: %v", err)
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	userRepo := repository.NewUserRepository(db)
 	clientRepo := repository.NewClientRepository(db)
@@ -51,7 +54,7 @@ func setupArchiveSuite(t *testing.T) *archiveSuite {
 	txStore := repository.NewTxStore(db)
 	return &archiveSuite{
 		db:         db,
-		caseSvc:    NewCaseService(caseRepo, clientRepo, userRepo, billingRepo, txStore, logger),
+		caseSvc:    NewCaseService(caseRepo, clientRepo, userRepo, txStore, logger),
 		billingSvc: NewBillingService(billingRepo, txStore, logger),
 	}
 }
